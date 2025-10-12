@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:15
+    container_name: ghg_postgres_db
+    environment:
+      POSTGRES_USER: ghg_user
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: ghg_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ghg_user -d ghg_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ghg_network
+
+  backend:
+    build: ./backend
+    container_name: ghg_backend
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ghg_platform
+      DB_USER: ghg_user
+      DB_PASSWORD: 1234
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ghg_network
+
+  frontend:
+    build: ./frontend
+    container_name: ghg_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - ghg_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:80/health",
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  postgres_data:
+
+networks:
+  ghg_network:
+    driver: bridge
